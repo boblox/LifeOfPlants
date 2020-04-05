@@ -12,23 +12,22 @@ namespace LifeOfPlants.App
 
         static async Task Main(string[] args)
         {
-            var plants = new List<Plant>
+            var simulator = new Simulator();
+            new List<Plant>
             {
-                new Beech(0, 0, 1, 1),
+                new Birch(0, 0, 1, 1),
                 new Beech(10, 10, 15, 5),
                 new Beech(-10, 10, 15, 5),
                 new Beech(10, -10, 15, 5),
                 new Beech(-10, -10, 15, 5)
-            };
-            var simulator = new Simulator(plants);
-            simulator.AddPlant(new Birch(10, 0, 10, 3));
+            }.ForEach(plant => simulator.AddPlant(plant));
 
             while (true)
             {
                 await Task.Delay(tickGap);
                 simulator.Tick();
                 Console.WriteLine("New tick");
-                foreach (var plant in plants)
+                foreach (var plant in simulator.Plants)
                 {
                     Console.WriteLine(plant.ToString());
                 }

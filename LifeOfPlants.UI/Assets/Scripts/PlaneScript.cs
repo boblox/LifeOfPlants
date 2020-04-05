@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using LifeOfPlants.Domain;
 using LifeOfPlants.Domain.Plants;
@@ -15,7 +14,8 @@ public class PlaneScript : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        var plants = new List<Plant>
+        simulator = new Simulator();
+        new List<Tree>
         {
             new Beech(0, 0, 1, 1),
             new Beech(10, 10, 15, 5),
@@ -23,17 +23,19 @@ public class PlaneScript : MonoBehaviour
             new Beech(10, -10, 15, 5),
             new Beech(-10, -10, 15, 5),
             new Birch(10, 0, 15, 3)
-        };
-        Debug.Log("Start count of plants: " + plants.Count);
-        simulator = new Simulator(plants);
-        Debug.Log("Simulator initialized");
-
-        foreach (var tree in plants.OfType<Tree>())
-        {
-            plantsDict.Add(tree, CreateGameObjectForTree(tree));
-        }
+        }.ForEach(AddTree);
+        Debug.Log("Start count of plants: " + simulator.Plants.Count);
 
         InvokeRepeating("GameTick", tickGap, tickGap);
+    }
+
+    void AddTree(Tree tree)
+    {
+        if (simulator.AddPlant(tree))
+        {
+            plantsDict.Add(tree, CreateGameObjectForTree(tree));
+            Debug.Log($"Plant added: {tree}");
+        }
     }
 
     GameObject CreateGameObjectForTree(Tree tree)
@@ -70,9 +72,7 @@ public class PlaneScript : MonoBehaviour
                 Tree tree = null;
                 if (clickedLeftButton) tree = new Birch(hit.point.x, hit.point.z, 1, 1);
                 else if (clickedRightButton) tree = new Beech(hit.point.x, hit.point.z, 1, 1);
-                plantsDict.Add(tree, CreateGameObjectForTree(tree));
-                simulator.AddPlant(tree);
-                Debug.Log("New plant added!");
+                AddTree(tree);
             }
         }
     }
