@@ -8,11 +8,11 @@ namespace LifeOfPlants.App
 {
     class Program
     {
-        public const int tickGap = 1000;
+        public const int tickGap = 100;
 
         static async Task Main(string[] args)
         {
-            var simulator = new Simulator();
+            var simulator = new Simulator(15, 15);
             new List<Plant>
             {
                 new Birch(0, 0, 1, 1),
@@ -20,7 +20,7 @@ namespace LifeOfPlants.App
                 new Beech(-10, 10, 15, 5),
                 new Beech(10, -10, 15, 5),
                 new Beech(-10, -10, 15, 5)
-            }.ForEach(plant => simulator.AddPlant(plant));
+            }.ForEach(plant => simulator.TryToAddPlant(plant));
 
             while (true)
             {

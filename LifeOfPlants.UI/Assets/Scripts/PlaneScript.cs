@@ -1,5 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using LifeOfPlants.Domain;
 using LifeOfPlants.Domain.Plants;
 using UnityEngine;
@@ -8,13 +13,18 @@ using Tree = LifeOfPlants.Domain.Plants.Tree;
 public class PlaneScript : MonoBehaviour
 {
     private Simulator simulator;
+    private readonly object simulatorLock = new object();
+    private TreeType selectedTreeTypeToCreate = TreeType.Beech;
+    private ConcurrentStack<Plant> addedPlants = new ConcurrentStack<Plant>();
     private readonly Dictionary<Plant, GameObject> plantsDict = new Dictionary<Plant, GameObject>();
     public const float tickGap = 0.3f;
 
     // Start is called before the first frame update
     void Start()
     {
-        simulator = new Simulator();
+        var meshSize = GetComponent<MeshFilter>().mesh.bounds.size;
+        var scale = transform.localScale;
+        simulator = new Simulator(scale.x * meshSize.x / 2, scale.z * meshSize.z / 2);
         new List<Tree>
         {
             new Beech(0, 0, 1, 1),
@@ -23,18 +33,43 @@ public class PlaneScript : MonoBehaviour
             new Beech(10, -10, 15, 5),
             new Beech(-10, -10, 15, 5),
             new Birch(10, 0, 15, 3)
-        }.ForEach(AddTree);
+        }.ForEach(CreateGameObjectForTreeAndAddItToPlantsDictAndSimulator);
         Debug.Log("Start count of plants: " + simulator.Plants.Count);
 
-        InvokeRepeating("GameTick", tickGap, tickGap);
+        //Task.Run(SimulatorTick);
+        Task.Factory.StartNew(SimulatorTick, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        StartCoroutine(RendererTick());
     }
 
-    void AddTree(Tree tree)
+    void CreateGameObjectForTreeAndAddItToPlantsDictAndSimulator(Tree tree)
     {
-        if (simulator.AddPlant(tree))
+        lock (simulatorLock)
         {
-            plantsDict.Add(tree, CreateGameObjectForTree(tree));
-            Debug.Log($"Plant added: {tree}");
+            if (simulator.TryToAddPlant(tree))
+            {
+                CreateGameObjectForTreeAndAddItToPlantsDict(tree);
+            }
+        }
+    }
+
+    void CreateGameObjectForTreeAndAddItToPlantsDict(Tree tree)
+    {
+        plantsDict.Add(tree, CreateGameObjectForTree(tree));
+        //Debug.Log($"Plant added: {tree}");
+    }
+
+    void RemovePlantFromPlantsDict(Plant plant)
+    {
+        Destroy(plantsDict[plant]);
+        plantsDict.Remove(plant);
+    }
+
+    void RemovePlantFromPlantsDictAndSimulator(Plant plant)
+    {
+        RemovePlantFromPlantsDict(plant);
+        lock (simulatorLock)
+        {
+            simulator.RemovePlant(plant);
         }
     }
 
@@ -64,40 +99,93 @@ public class PlaneScript : MonoBehaviour
     {
         var clickedLeftButton = Input.GetMouseButtonDown(0);
         var clickedRightButton = Input.GetMouseButtonDown(1);
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            selectedTreeTypeToCreate = TreeType.Beech;
+        }
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            selectedTreeTypeToCreate = TreeType.Birch;
+        }
         if (clickedLeftButton || clickedRightButton)
         {
             var ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit) && hit.transform.gameObject == gameObject)
+            var hitSuccess = Physics.Raycast(ray, out var hit);
+            if (hitSuccess)
             {
-                Tree tree = null;
-                if (clickedLeftButton) tree = new Birch(hit.point.x, hit.point.z, 1, 1);
-                else if (clickedRightButton) tree = new Beech(hit.point.x, hit.point.z, 1, 1);
-                AddTree(tree);
+                if (clickedLeftButton && hit.transform.gameObject == gameObject)
+                {
+                    Tree tree;
+                    switch (selectedTreeTypeToCreate)
+                    {
+                        case TreeType.Beech:
+                            tree = new Beech(hit.point.x, hit.point.z, Tree.DefaultStartHeight, Tree.DefaultStartRadius);
+                            break;
+                        case TreeType.Birch:
+                        default:
+                            tree = new Birch(hit.point.x, hit.point.z, Tree.DefaultStartHeight, Tree.DefaultStartRadius);
+                            break;
+                    }
+                    CreateGameObjectForTreeAndAddItToPlantsDictAndSimulator(tree);
+                }
+                else if (clickedRightButton)
+                {
+                    var plant = plantsDict.FirstOrDefault(i => i.Value == hit.transform.gameObject).Key;
+                    if (plant != null)
+                    {
+                        RemovePlantFromPlantsDictAndSimulator(plant);
+                    }
+                }
             }
         }
     }
 
-    void GameTick()
+    async Task SimulatorTick()
     {
-        Debug.Log("New tick");
-        simulator.Tick();
-
-        plantsDict.Keys.OfType<Tree>().Where(tree => tree.IsDead).ToList().ForEach(tree =>
+        while (true)
         {
-            Destroy(plantsDict[tree]);
-            plantsDict.Remove(tree);
-        });
-        foreach (var plantKeyValuePair in plantsDict)
-        {
-            if (plantKeyValuePair.Key is Tree tree)
+            try
             {
-                var currentPosition = plantKeyValuePair.Value.transform.position;
-                plantKeyValuePair.Value.transform.position =
-                    new Vector3(currentPosition.x, tree.Height / 2, currentPosition.z);
-                plantKeyValuePair.Value.transform.localScale =
-                    new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
-                Debug.Log(tree.ToString());
+                lock (simulatorLock)
+                {
+                    var plants = simulator.Tick().ToArray();
+                    if (plants.Any()) addedPlants.PushRange(plants);
+                }
+                await Task.Delay((int)(tickGap * 1000));
+            }
+            catch (Exception exc)
+            {
+                Debug.LogError(exc.Message);
             }
         }
+    }
+
+    IEnumerator RendererTick()
+    {
+        while (true)
+        {
+            plantsDict.Keys.OfType<Tree>().Where(tree => tree.IsDead).ToList().ForEach(RemovePlantFromPlantsDict);
+            foreach (var plantKeyValuePair in plantsDict)
+            {
+                if (plantKeyValuePair.Key is Tree tree)
+                {
+                    var currentPosition = plantKeyValuePair.Value.transform.position;
+                    plantKeyValuePair.Value.transform.position =
+                        new Vector3(currentPosition.x, tree.Height / 2, currentPosition.z);
+                    plantKeyValuePair.Value.transform.localScale =
+                        new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
+                    //Debug.Log(tree.ToString());
+                }
+            }
+            addedPlants.OfType<Tree>().ToList().ForEach(CreateGameObjectForTreeAndAddItToPlantsDict);
+            addedPlants.Clear();
+            yield return new WaitForSeconds(tickGap);
+        }
+    }
+
+    private enum TreeType
+    {
+        Birch,
+        Beech
     }
 }
