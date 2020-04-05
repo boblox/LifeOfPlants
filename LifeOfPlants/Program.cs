@@ -18,10 +18,10 @@ namespace LifeOfPlants.App
                 new Beech(10, 10, 15, 5),
                 new Beech(-10, 10, 15, 5),
                 new Beech(10, -10, 15, 5),
-                new Beech(-10, -10, 15, 5),
-                new Birch(10, 0, 15, 3)
+                new Beech(-10, -10, 15, 5)
             };
             var simulator = new Simulator(plants);
+            simulator.AddPlant(new Birch(10, 0, 10, 3));
 
             while (true)
             {

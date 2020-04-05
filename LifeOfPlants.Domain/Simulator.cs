@@ -16,6 +16,11 @@ namespace LifeOfPlants.Domain
             this.shadowImpactCalculator = new ShadowImpactCalculator();
         }
 
+        public void AddPlant(Plant plant)
+        {
+            plants.Add(plant);
+        }
+
         public void Tick()
         {
             var treeUpdaters = new List<TreeUpdater>();
