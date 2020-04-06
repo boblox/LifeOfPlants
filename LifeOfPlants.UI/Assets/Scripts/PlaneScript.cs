@@ -8,47 +8,65 @@ using System.Threading.Tasks;
 using LifeOfPlants.Domain;
 using LifeOfPlants.Domain.Plants;
 using UnityEngine;
+using Random = System.Random;
 using Tree = LifeOfPlants.Domain.Plants.Tree;
 
 public class PlaneScript : MonoBehaviour
 {
     private Simulator simulator;
-    private readonly object simulatorLock = new object();
     private TreeType selectedTreeTypeToCreate = TreeType.Beech;
-    private ConcurrentStack<Plant> addedPlants = new ConcurrentStack<Plant>();
+    private readonly ConcurrentStack<Plant> addedPlants = new ConcurrentStack<Plant>();
     private readonly Dictionary<Plant, GameObject> plantsDict = new Dictionary<Plant, GameObject>();
-    public const float tickGap = 0.3f;
+    private const float tickGap = 0.3f;
+    private readonly Random random = new Random();
 
     // Start is called before the first frame update
     void Start()
     {
         var meshSize = GetComponent<MeshFilter>().mesh.bounds.size;
         var scale = transform.localScale;
-        simulator = new Simulator(scale.x * meshSize.x / 2, scale.z * meshSize.z / 2);
+        simulator = new Simulator(scale.x * meshSize.x / 2, scale.z * meshSize.z / 2, 8);
         new List<Tree>
         {
-            new Beech(0, 0, 1, 1),
-            new Beech(10, 10, 15, 5),
-            new Beech(-10, 10, 15, 5),
-            new Beech(10, -10, 15, 5),
-            new Beech(-10, -10, 15, 5),
-            new Birch(10, 0, 15, 3)
+            //new Beech(0, 0, 1, 1),
+            //new Beech(10, 10, 15, 5),
+            //new Beech(-10, 10, 15, 5),
+            //new Beech(10, -10, 15, 5),
+            //new Beech(-10, -10, 15, 5),
+            //new Birch(10, 0, 15, 3)
+            GetRandomTree(TreeType.Beech),
+            GetRandomTree(TreeType.Birch),
+            GetRandomTree(TreeType.Beech),
+            GetRandomTree(TreeType.Birch),
+            GetRandomTree(TreeType.Beech),
         }.ForEach(CreateGameObjectForTreeAndAddItToPlantsDictAndSimulator);
         Debug.Log("Start count of plants: " + simulator.Plants.Count);
 
-        //Task.Run(SimulatorTick);
         Task.Factory.StartNew(SimulatorTick, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         StartCoroutine(RendererTick());
     }
 
+    Tree GetRandomTree(TreeType treeType)
+    {
+        var x = random.NextDouble() * 2 * simulator.PlaneSizeX - simulator.PlaneSizeX;
+        var y = random.NextDouble() * 2 * simulator.PlaneSizeY - simulator.PlaneSizeY;
+        var height = random.Next(10) + 10;
+        var radius = random.Next(2) + 3;
+        switch (treeType)
+        {
+            case TreeType.Birch:
+                return new Birch((float)x, (float)y, height, radius);
+            case TreeType.Beech:
+            default:
+                return new Beech((float)x, (float)y, height, radius);
+        }
+    }
+
     void CreateGameObjectForTreeAndAddItToPlantsDictAndSimulator(Tree tree)
     {
-        lock (simulatorLock)
+        if (simulator.TryToAddPlants(new List<Plant> { tree }).Any())
         {
-            if (simulator.TryToAddPlant(tree))
-            {
-                CreateGameObjectForTreeAndAddItToPlantsDict(tree);
-            }
+            CreateGameObjectForTreeAndAddItToPlantsDict(tree);
         }
     }
 
@@ -67,10 +85,7 @@ public class PlaneScript : MonoBehaviour
     void RemovePlantFromPlantsDictAndSimulator(Plant plant)
     {
         RemovePlantFromPlantsDict(plant);
-        lock (simulatorLock)
-        {
-            simulator.RemovePlant(plant);
-        }
+        simulator.RemovePlant(plant);
     }
 
     GameObject CreateGameObjectForTree(Tree tree)
@@ -146,11 +161,8 @@ public class PlaneScript : MonoBehaviour
         {
             try
             {
-                lock (simulatorLock)
-                {
-                    var plants = simulator.Tick().ToArray();
-                    if (plants.Any()) addedPlants.PushRange(plants);
-                }
+                var plants = (await simulator.Tick()).ToArray();
+                if (plants.Any()) addedPlants.PushRange(plants);
                 await Task.Delay((int)(tickGap * 1000));
             }
             catch (Exception exc)

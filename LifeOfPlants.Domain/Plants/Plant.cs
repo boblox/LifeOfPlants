@@ -4,6 +4,7 @@ namespace LifeOfPlants.Domain.Plants
 {
     public abstract class Plant
     {
+        public Guid Id { get; }
         public float X { get; }
         public float Y { get; }
         public int Age { get; protected set; }
@@ -11,6 +12,7 @@ namespace LifeOfPlants.Domain.Plants
 
         protected Plant(float x, float y)
         {
+            Id = Guid.NewGuid();
             X = x;
             Y = y;
             Age = 0;

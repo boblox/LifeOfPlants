@@ -7,12 +7,14 @@
         }
 
         public override string PlantType => "Birch";
-        public override float MaxHeight => 30;
+        public override float DefaultMaxHeight => 30;
+        public override int MaxHeightVariation => 5;
         public override float MaxRadius => 5;
-        public override int MaxAge => 125;
+        public override int DefaultMaxAge => 125;
+        public override int MaxAgeVariation => 25;
         public override int MinAgeOfFruiting => 15;
         public override int MinHeightOfFruiting => 5;
-        public override int CountOfFruitsPerTick => 4;
+        public override int CountOfFruitsPerTick => 3;
         public override int MaxSeedSprayingDistance => 50;
         public override float HeightGrowthPerTick => 1;
         public override float RadiusGrowthPerTick => 0.25f;

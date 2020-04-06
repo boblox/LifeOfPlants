@@ -1,63 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
 using LifeOfPlants.Domain.Plants;
 
 namespace LifeOfPlants.Domain
 {
     public class ShadowImpactCalculator
     {
-        private static double GetAngleBetweenAAndBInTriangle(double a, double b, double c)
-        {
-            return Math.Acos((Math.Pow(a, 2) + Math.Pow(b, 2) - Math.Pow(c, 2)) / (2 * a * b));
-        }
-
-        private static double GetAngleBetweenVectors((double x, double y) first, (double x, double y) second)
-        {
-            var dotProduct = first.x * second.x + first.y * second.y;
-            var firstLength = Math.Sqrt(first.x * first.x + first.y * first.y);
-            var secondLength = Math.Sqrt(second.x * second.x + second.y * second.y);
-            return Math.Acos(dotProduct / (firstLength * secondLength));
-        }
-
-        private static double GetAngleBetweenXAxeAndVectorFrom0To2Pi((double x, double y) vector)
-        {
-            var angle = GetAngleBetweenVectors((vector.x, vector.y), (1, 0));
-            return vector.y >= 0 ? angle : 2 * Math.PI - angle;
-        }
-
-        private enum IntervalEdgeType
-        {
-            Start = 0,
-            End = 1
-        }
-
-        private struct ImpactEdge
-        {
-            public Guid Id { get; }
-            public float Angle { get; }
-            public IntervalEdgeType IntervalEdgeType { get; }
-            public float ImpactPerRadian { get; }
-
-            public ImpactEdge(Guid id, float angle, IntervalEdgeType intervalEdgeType, float impactPerRadian)
-            {
-                Id = id;
-                Angle = angle;
-                IntervalEdgeType = intervalEdgeType;
-                ImpactPerRadian = impactPerRadian;
-            }
-        }
-
-        public float GetNormalizedImpact(Plant affectedPlant, List<Plant> allPlants)
+        public float GetNormalizedImpact(Plant affectedPlant, List<Plant> nearbyPlants)
         {
             var impactEdges = new List<ImpactEdge>();
             const float TwoPi = 2 * (float)Math.PI;
 
             if (affectedPlant is Tree affectedTree)
             {
-                foreach (var affectingTree in allPlants.Except(new[] { affectedTree }).OfType<Tree>())
+                foreach (var affectingTree in nearbyPlants.OfType<Tree>())
                 {
                     var distanceBetweenTrees = affectedPlant.DistanceTo(affectingTree.X, affectingTree.Y);
                     if (distanceBetweenTrees >= affectingTree.Height) continue;
@@ -69,23 +26,34 @@ namespace LifeOfPlants.Domain
                     }
                     else
                     {
-                        var halfOfAngleToAffectingTreeFromAffected = GetAngleBetweenAAndBInTriangle(distanceBetweenTrees, distanceToSideOfAffectingTree, affectingTree.Radius);
-                        var angleToAffectingTreeFromXAxe = GetAngleBetweenXAxeAndVectorFrom0To2Pi((affectingTree.X - affectedTree.X, affectingTree.Y - affectedTree.Y));
-                        var startAngle = angleToAffectingTreeFromXAxe - halfOfAngleToAffectingTreeFromAffected;
-                        var endAngle = angleToAffectingTreeFromXAxe + halfOfAngleToAffectingTreeFromAffected;
+                        var halfOfAngleToAffectingTreeFromAffected = MathUtils.GetAngleBetweenAAndBInTriangle(distanceBetweenTrees, distanceToSideOfAffectingTree, affectingTree.Radius);
+                        var angleToAffectingTreeFromXAxe = MathUtils.GetAngleBetweenXAxeAndVectorFrom0To2Pi((affectingTree.X - affectedTree.X, affectingTree.Y - affectedTree.Y));
+                        var startAngle = (float) (angleToAffectingTreeFromXAxe - halfOfAngleToAffectingTreeFromAffected);
+                        var endAngle = (float) (angleToAffectingTreeFromXAxe + halfOfAngleToAffectingTreeFromAffected);
                         var impactPerRadian = GetShadeImpact(affectedTree, affectingTree) / TwoPi;
 
                         var id = Guid.NewGuid();
-                        var id2 = id;
-                        impactEdges.Add(new ImpactEdge(id, (float)startAngle, IntervalEdgeType.Start, impactPerRadian));
-                        if (endAngle > TwoPi)
+                        if (startAngle < 0)
                         {
-                            id2 = Guid.NewGuid();
+                            impactEdges.Add(new ImpactEdge(id, startAngle + TwoPi, IntervalEdgeType.Start, impactPerRadian));
                             impactEdges.Add(new ImpactEdge(id, TwoPi, IntervalEdgeType.End, impactPerRadian));
+                            var id2 = Guid.NewGuid();
                             impactEdges.Add(new ImpactEdge(id2, 0, IntervalEdgeType.Start, impactPerRadian));
-                            endAngle -= TwoPi;
+                            impactEdges.Add(new ImpactEdge(id2, endAngle, IntervalEdgeType.End, impactPerRadian));
                         }
-                        impactEdges.Add(new ImpactEdge(id2, (float)endAngle, IntervalEdgeType.End, impactPerRadian));
+                        else if (endAngle > TwoPi)
+                        {
+                            impactEdges.Add(new ImpactEdge(id, startAngle, IntervalEdgeType.Start, impactPerRadian));
+                            impactEdges.Add(new ImpactEdge(id, TwoPi, IntervalEdgeType.End, impactPerRadian));
+                            var id2 = Guid.NewGuid();
+                            impactEdges.Add(new ImpactEdge(id2, 0, IntervalEdgeType.Start, impactPerRadian));
+                            impactEdges.Add(new ImpactEdge(id2, endAngle - TwoPi, IntervalEdgeType.End, impactPerRadian));
+                        }
+                        else
+                        {
+                            impactEdges.Add(new ImpactEdge(id, startAngle, IntervalEdgeType.Start, impactPerRadian));
+                            impactEdges.Add(new ImpactEdge(id, endAngle, IntervalEdgeType.End, impactPerRadian));
+                        }
                     }
                 }
 
@@ -115,12 +83,13 @@ namespace LifeOfPlants.Domain
             impactEdges = impactEdges.OrderBy(i => i.Angle).ThenBy(i => i.IntervalEdgeType).ToList();
             var impactStack = new List<ImpactEdge>();
             var totalImpact = 0f;
+            ImpactEdge previousImpactEdge = default;
             foreach (var impactEdge in impactEdges)
             {
                 if (!impactStack.Any()) impactStack.Add(impactEdge);
                 else
                 {
-                    totalImpact += impactStack.Max(i => i.ImpactPerRadian) * (impactEdge.Angle - impactStack[impactStack.Count - 1].Angle);
+                    totalImpact += impactStack.Max(i => i.ImpactPerRadian) * (impactEdge.Angle - previousImpactEdge.Angle);
                     if (impactEdge.IntervalEdgeType == IntervalEdgeType.Start)
                     {
                         impactStack.Add(impactEdge);
@@ -130,8 +99,32 @@ namespace LifeOfPlants.Domain
                         impactStack.RemoveAll(i => i.Id == impactEdge.Id);
                     }
                 }
+
+                previousImpactEdge = impactEdge;
             }
             return totalImpact;
+        }
+
+        private enum IntervalEdgeType
+        {
+            Start = 0,
+            End = 1
+        }
+
+        private struct ImpactEdge
+        {
+            public Guid Id { get; }
+            public float Angle { get; }
+            public IntervalEdgeType IntervalEdgeType { get; }
+            public float ImpactPerRadian { get; }
+
+            public ImpactEdge(Guid id, float angle, IntervalEdgeType intervalEdgeType, float impactPerRadian)
+            {
+                Id = id;
+                Angle = angle;
+                IntervalEdgeType = intervalEdgeType;
+                ImpactPerRadian = impactPerRadian;
+            }
         }
     }
 }

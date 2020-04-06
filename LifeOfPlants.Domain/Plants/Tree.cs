@@ -9,9 +9,13 @@ namespace LifeOfPlants.Domain.Plants
         public const float DefaultStartHeight = 1f;
         public float Radius { get; protected set; }
         public const float DefaultStartRadius = 1f;
-        public abstract float MaxHeight { get; }
+        public abstract float DefaultMaxHeight { get; }
+        public abstract int MaxHeightVariation { get; }
+        public float MaxHeight { get; }
         public abstract float MaxRadius { get; }
-        public abstract int MaxAge { get; }
+        public abstract int DefaultMaxAge { get; }
+        public abstract int MaxAgeVariation { get; }
+        public int MaxAge { get; }
         public abstract int MinAgeOfFruiting { get; }
         public abstract int MinHeightOfFruiting { get; }
         public abstract int CountOfFruitsPerTick { get; }
@@ -27,8 +31,10 @@ namespace LifeOfPlants.Domain.Plants
         {
             Height = height;
             Radius = radius;
+            MaxAge = DefaultMaxAge + (new Random().Next(2 * MaxAgeVariation) - MaxAgeVariation);
+            MaxHeight = DefaultMaxHeight + (new Random().Next(2 * MaxHeightVariation) - MaxHeightVariation);
             if (Radius > MaxRadius) throw new ArgumentException("Radius cant be bigger then MaxRadius");
-            if (Height > MaxHeight) throw new ArgumentException("Height Cant be bigger then MaxHeight");
+            if (Height > MaxHeight) throw new ArgumentException("Height Cant be bigger then DefaultMaxHeight");
         }
 
         public void RaiseAge(int ageChange)
@@ -51,8 +57,9 @@ namespace LifeOfPlants.Domain.Plants
             if (normalizedShadowImpact > GrowthStopShadowImpact) return new TreeGrowth(0, 0);
 
             var maxPossibleRadiusGrowth = new[] { maxAllowedRadiusGrowth, RadiusGrowthPerTick, MaxRadius - Radius }.Min();
-            //var radiusGrowthShortageRatio = maxPossibleRadiusGrowth / RadiusGrowthPerTick; //TODO: review ratio!
-            var maxPossibleHeightGrowth = new[] { HeightGrowthPerTick /*/ radiusGrowthShortageRatio*/, MaxHeight - Height }.Min();
+            var radiusGrowthShortageRatio = 1 - maxPossibleRadiusGrowth / RadiusGrowthPerTick; //TODO: review ratio!
+            var maxPossibleHeightGrowth = new[] { HeightGrowthPerTick + 0.25f * HeightGrowthPerTick * radiusGrowthShortageRatio, MaxHeight - Height }.Min();
+            //var maxPossibleHeightGrowth = new[] { HeightGrowthPerTick, DefaultMaxHeight - Height }.Min();
 
             var slowdownRatio = (GrowthStopShadowImpact - normalizedShadowImpact) / GrowthStopShadowImpact;
             var radiusGrowth = slowdownRatio * maxPossibleRadiusGrowth;

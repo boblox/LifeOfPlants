@@ -2,107 +2,133 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using LifeOfPlants.Domain.Plants;
 
 namespace LifeOfPlants.Domain
 {
     public class Simulator
     {
-        private readonly float planeSizeX;
-        private readonly float planeSizeY;
+        public float PlaneSizeX { get; }
+        public float PlaneSizeY { get; }
+        private readonly int maxConcurrentNumberOfTasks;
         private readonly List<Plant> plants = new List<Plant>();
+        private readonly Dictionary<Plant, List<Plant>> nearbyPlantsCache = new Dictionary<Plant, List<Plant>>();
         private readonly ShadowImpactCalculator shadowImpactCalculator;
-        public ReadOnlyCollection<Plant> Plants { get; }
+        private readonly PlantsCreator plantsCreator;
+        private const float MinGapBetweenCreatedTreeAndOtherTrees = 1.5f;
+        public ReadOnlyCollection<Plant> Plants => plants.AsReadOnly();
 
-        public Simulator(float planeSizeX, float planeSizeY)
+        public Simulator(float planeSizeX, float planeSizeY, int maxConcurrentNumberOfTasks)
         {
-            this.planeSizeX = planeSizeX;
-            this.planeSizeY = planeSizeY;
-            this.Plants = new ReadOnlyCollection<Plant>(plants);
+            this.PlaneSizeX = planeSizeX;
+            this.PlaneSizeY = planeSizeY;
+            this.maxConcurrentNumberOfTasks = maxConcurrentNumberOfTasks;
             this.shadowImpactCalculator = new ShadowImpactCalculator();
+            this.plantsCreator = new PlantsCreator();
         }
 
-        public bool TryToAddPlant(Plant plant)
+        public List<Plant> TryToAddPlants(List<Plant> potentialNewPlants)
         {
-            if (!FitsIntoPlane(plant)) return false;
-            if (plant is Tree tree)
+            HashSet<Plant> plantsToBeUpdated = new HashSet<Plant>();
+            List<Plant> addedPlants = new List<Plant>();
+            foreach (var plant in potentialNewPlants)
             {
-                if (GetMinSpaceBetweenTreeAndPlants(tree) >= 0)
+                if (!FitsIntoPlane(plant)) continue;
+                if (plant is Tree tree)
                 {
-                    plants.Add(plant);
-                    return true;
+                    var nearbyPlants = GetNearbyPlantsFor(plant);
+                    if (GetMinGapBetweenTreeAndOtherPlants(tree, nearbyPlants) >= MinGapBetweenCreatedTreeAndOtherTrees)
+                    {
+                        plants.Add(plant);
+                        addedPlants.Add(plant);
+                        plantsToBeUpdated.Add(plant);
+                        nearbyPlants.ForEach(nearbyPlant => plantsToBeUpdated.Add(nearbyPlant));
+                    }
                 }
-                return false;
+                else
+                {
+                    throw new NotSupportedException("Unsupported plant type");
+                }
             }
-            plants.Add(plant);
-            return true;
+
+            foreach (var plant in plantsToBeUpdated)
+            {
+                nearbyPlantsCache[plant] = GetNearbyPlantsFor(plant);
+            }
+            return addedPlants;
         }
 
         public void RemovePlant(Plant plant)
         {
+            foreach (var nearbyPlantsList in nearbyPlantsCache.Values)
+            {
+                nearbyPlantsList.Remove(plant);
+            }
+            this.nearbyPlantsCache.Remove(plant);
             plants.Remove(plant);
+        }
+
+        public async Task<List<Plant>> Tick()
+        {
+            var treeUpdaters = await Task.WhenAll(ParallelUtils.RunInParallelBatches(GetPlantsUpdates, plants.Count, maxConcurrentNumberOfTasks));
+            treeUpdaters.SelectMany(list => list).ToList().ForEach(treeUpdater => treeUpdater.UpdateTree());
+            var potentialNewPlants = (await Task.WhenAll(ParallelUtils.RunInParallelBatches(CreateChildPlants, plants.Count, maxConcurrentNumberOfTasks)))
+                .SelectMany(list => list)
+                .ToList();
+            var addedPlants = TryToAddPlants(potentialNewPlants);
+            RemoveDeadPlants();
+            return addedPlants;
+        }
+
+        private List<Plant> GetNearbyPlantsFor(Plant plant)
+        {
+            return plants.Where(otherPlant =>
+                otherPlant is Tree otherTree && otherTree != plant && otherTree.DistanceTo(plant.X, plant.Y) <= otherTree.MaxHeight).ToList();
         }
 
         private bool FitsIntoPlane(Plant plant)
         {
-            return plant.X >= -planeSizeX && plant.X <= planeSizeX && plant.Y >= -planeSizeY && plant.Y <= planeSizeY;
+            return plant.X >= -PlaneSizeX && plant.X <= PlaneSizeX && plant.Y >= -PlaneSizeY && plant.Y <= PlaneSizeY;
         }
 
-        public List<Plant> Tick()
-        {
-            UpdateTreesBecauseOfGrowing();
-            RemoveDeadTrees();
-            return PlantPlantsFromSeeds();
-        }
-
-        private void UpdateTreesBecauseOfGrowing()
+        private List<TreeUpdater> GetPlantsUpdates(int startIndex, int endIndex)
         {
             var treeUpdaters = new List<TreeUpdater>();
-            foreach (var plant in plants)
+            for (var i = startIndex; i <= endIndex; i++)
             {
+                var plant = plants[i];
                 if (plant is Tree tree)
                 {
-                    var normalizedShadowImpact = shadowImpactCalculator.GetNormalizedImpact(plant, plants);
-                    var maxRadiusGrowth = Math.Max(0, GetMinSpaceBetweenTreeAndPlants(tree) / 2);
+                    var normalizedShadowImpact = shadowImpactCalculator.GetNormalizedImpact(plant, nearbyPlantsCache[plant]);
+                    var maxRadiusGrowth = Math.Max(0, GetMinGapBetweenTreeAndOtherPlants(tree, nearbyPlantsCache[plant]) / 2);
                     treeUpdaters.Add(new TreeUpdater(tree, tree.GetMaximumPossibleRaiseAfterTick(normalizedShadowImpact, maxRadiusGrowth), 1));
                 }
             }
-            treeUpdaters.ForEach(treeUpdater => treeUpdater.UpdateTree());
+            return treeUpdaters;
         }
 
-        private void RemoveDeadTrees()
+        private void RemoveDeadPlants()
         {
-            plants.OfType<Tree>().Where(i => i.IsDead).ToList().ForEach(tree => plants.Remove(tree));
+            plants.OfType<Tree>().Where(i => i.IsDead).ToList().ForEach(RemovePlant);
         }
 
-        private List<Plant> PlantPlantsFromSeeds()
+        private List<Plant> CreateChildPlants(int startIndex, int endIndex)
         {
             var newPlants = new List<Plant>();
-            foreach (var plant in plants)
+            for (var i = startIndex; i <= endIndex; i++)
             {
-                if (plant is Tree tree && tree.CanBearFruits)
-                {
-                    Enumerable.Range(0, tree.CountOfFruitsPerTick).ToList()
-                        .ForEach(i => newPlants.Add(GenerateKidTreeFrom(tree)));
-                }
+                newPlants.AddRange(plantsCreator.CreateChildPlantsFromSeedsOf(plants[i]));
             }
-            return newPlants.Where(TryToAddPlant).ToList();
+            return newPlants;
         }
 
-        private Tree GenerateKidTreeFrom(Tree tree)
+        private float GetMinGapBetweenTreeAndOtherPlants(Tree targetTree, List<Plant> otherPlants)
         {
-            var random = new Random();
-            var sign = random.Next(2) == 0 ? -1 : 1;
-            var radius = (float)random.NextDouble() * tree.MaxSeedSprayingDistance;
-            var xDiff = (float)random.NextDouble() * radius * 2 - radius;
-            var yDiff = sign * (float)Math.Sqrt(radius * radius - xDiff * xDiff);
-            return tree.GenerateKidTree(tree.X + xDiff, tree.Y + yDiff, Tree.DefaultStartHeight, Tree.DefaultStartRadius);
-        }
-
-        private float GetMinSpaceBetweenTreeAndPlants(Tree targetTree)
-        {
-            var otherTrees = plants.OfType<Tree>().Except(new[] { targetTree }).ToList();
-            return otherTrees.Any() ? otherTrees.Min(tree => tree.DistanceTo(targetTree.X, targetTree.Y) - tree.Radius - targetTree.Radius) : 0;
+            var otherTrees = otherPlants.OfType<Tree>().ToList();
+            return otherTrees.Any() ?
+                otherTrees.Min(tree => tree.DistanceTo(targetTree.X, targetTree.Y) - tree.Radius - targetTree.Radius) :
+                float.MaxValue;
         }
 
         private struct TreeUpdater
