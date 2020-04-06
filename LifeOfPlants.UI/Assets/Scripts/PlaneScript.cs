@@ -88,25 +88,67 @@ public class PlaneScript : MonoBehaviour
         simulator.RemovePlant(plant);
     }
 
-    GameObject CreateGameObjectForTree(Tree tree)
+    void SetPosition(GameObject gameObject, Tree tree)
     {
-        var gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        gameObj.transform.position = new Vector3(tree.X, tree.Height / 2, tree.Y);
-        gameObj.transform.localScale = new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
-        Material material;
+        float scaleFactor;
         switch (tree)
         {
             case Birch _:
-                material = Resources.Load<Material>("Materials/Birch");
+                scaleFactor = 1;
                 break;
             case Beech _:
             default:
-                material = Resources.Load<Material>("Materials/Beech");
+                scaleFactor = 0.06f;
+                break;
+        }
+        gameObject.transform.position = new Vector3(tree.X, 0, tree.Y);
+        gameObject.transform.localScale = new Vector3(tree.Radius * 2 * scaleFactor, tree.Height / 2 * scaleFactor, tree.Radius * 2 * scaleFactor);
+    }
+
+    GameObject CreateGameObjectForTree(Tree tree)
+    {
+        GameObject gameObj;
+        switch (tree)
+        {
+            case Birch _:
+                gameObj = GameObject.Find("Birch_1");
+                break;
+            case Beech _:
+            default:
+                gameObj = GameObject.Find("Tree9_2");
                 break;
         }
 
-        gameObj.GetComponent<MeshRenderer>().material = material;
-        return gameObj;
+        var clonedObject = Instantiate(gameObj);
+        SetPosition(clonedObject, tree);
+        //clonedObject.transform.position = new Vector3(tree.X, 0, tree.Y);
+        //clonedObject.transform.localScale = new Vector3(tree.Radius * 2 * scaleFactor, tree.Height / 2 * scaleFactor, tree.Radius * 2 * scaleFactor);
+
+        //var gameObj = GameObject.Find("Birch_1");
+        //gameObj.AddComponent<MeshFilter>();
+        //gameObj.AddComponent<MeshRenderer>();
+
+        //var clonedObject = Instantiate(gameObj, new Vector3(tree.X, 0, tree.Y), Quaternion.identity);
+        //clonedObject.transform.localScale = new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
+
+        //var gameObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        //gameObj.transform.position = new Vector3(tree.X, tree.Height / 2, tree.Y);
+        //gameObj.transform.localScale = new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
+        //Material material;
+        //switch (tree)
+        //{
+        //    case Birch _:
+        //        material = Resources.Load<Material>("Materials/Birch");
+        //        break;
+        //    case Beech _:
+        //    default:
+        //        material = Resources.Load<Material>("Materials/Beech");
+        //        break;
+        //}
+
+        //gameObj.GetComponent<MeshRenderer>().material = material;
+        //return gameObj;
+        return clonedObject;
     }
 
     // Update is called once per frame
@@ -181,11 +223,12 @@ public class PlaneScript : MonoBehaviour
             {
                 if (plantKeyValuePair.Key is Tree tree)
                 {
-                    var currentPosition = plantKeyValuePair.Value.transform.position;
-                    plantKeyValuePair.Value.transform.position =
-                        new Vector3(currentPosition.x, tree.Height / 2, currentPosition.z);
-                    plantKeyValuePair.Value.transform.localScale =
-                        new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
+                    SetPosition(plantKeyValuePair.Value, tree);
+                    //var currentPosition = plantKeyValuePair.Value.transform.position;
+                    //plantKeyValuePair.Value.transform.position =
+                    //    new Vector3(currentPosition.x, 0, currentPosition.z);
+                    //plantKeyValuePair.Value.transform.localScale =
+                    //    new Vector3(tree.Radius * 2, tree.Height / 2, tree.Radius * 2);
                     //Debug.Log(tree.ToString());
                 }
             }

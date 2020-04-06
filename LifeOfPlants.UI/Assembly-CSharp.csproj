@@ -65,6 +65,7 @@
   <ItemGroup>
     <Compile Include="Assets\Scripts\CameraScript.cs" />
     <Compile Include="Assets\Scripts\PlaneScript.cs" />
+    <None Include="Assets\Packs\BirchPackVol1\Works For Fun.txt" />
     <Reference Include="Unity.TextMeshPro.Editor">
       <HintPath>C:/Work/Games/LifeOfPlants/LifeOfPlants.UI/Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
     </Reference>
