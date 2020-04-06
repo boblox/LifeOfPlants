@@ -23,9 +23,9 @@ public class PlaneScript : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        var meshSize = GetComponent<MeshFilter>().mesh.bounds.size;
+        var meshSize = GetComponent<Terrain>().terrainData.size;
         var scale = transform.localScale;
-        simulator = new Simulator(scale.x * meshSize.x / 2, scale.z * meshSize.z / 2, 8);
+        simulator = new Simulator(meshSize.x / 2, meshSize.z / 2, 8);
         new List<Tree>
         {
             //new Beech(0, 0, 1, 1),
