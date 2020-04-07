@@ -5,7 +5,7 @@ using UnityEngine;
 public class CameraScript : MonoBehaviour
 {
     private const int angle = 1;
-    private const int translate = 1;
+    private const int translate = 2;
 
     // Start is called before the first frame update
     void Start()
@@ -67,12 +67,12 @@ public class CameraScript : MonoBehaviour
         else if (Input.GetAxis("Mouse ScrollWheel") > 0f)
         {
             //transform.Translate(-translate, 0, 0);
-            transform.transform.position += new Vector3(0, -2 * translate, 0);
+            transform.transform.position += new Vector3(0, -3 * translate, 0);
         }
         else if (Input.GetAxis("Mouse ScrollWheel") < 0f)
         {
             //transform.Translate(translate, 0, 0);
-            transform.transform.position += new Vector3(0, 2 * translate, 0);
+            transform.transform.position += new Vector3(0, 3 * translate, 0);
         }
     }
 }
