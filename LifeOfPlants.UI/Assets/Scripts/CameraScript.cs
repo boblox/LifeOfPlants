@@ -1,78 +1,38 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class CameraScript : MonoBehaviour
 {
-    private const int angle = 1;
-    private const int translate = 2;
+    private float _rotationX;
+    private const float minimumVertical = -60f;
+    private const float maximumVertical = 60f;
+    private const float sensitivityVertical = 3;
+    private const float sensitivityHorizontal = 3;
+    private const float speed = 40;
+    private CharacterController _charController;
 
     // Start is called before the first frame update
     void Start()
     {
-
+        _charController = GetComponent<CharacterController>();
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (Input.GetKey(KeyCode.W))
-        {
-            transform.Rotate(-angle, 0, 0);
-        }
-        else if (Input.GetKey(KeyCode.S))
-        {
-            transform.Rotate(angle, 0, 0);
-            //transform.transform.Rot += new Quaternion(0, 0, angle, 1);
-        }
-        else if (Input.GetKey(KeyCode.A))
-        {
-            //transform.Rotate(0, -angle, 0);
-            transform.Rotate(new Vector3(0, 1, 0), -angle, Space.World);
-            //transform.rotation. = Quaternion.AngleAxis(angle, new Vector3(0, 1, 0));
-        }
-        else if (Input.GetKey(KeyCode.D))
-        {
-            transform.Rotate(new Vector3(0, 1, 0), angle, Space.World);
-            //transform.Rotate(0, angle, 0);
-        }
+        _rotationX -= Input.GetAxis("Mouse Y") * sensitivityVertical;
+        _rotationX = Mathf.Clamp(_rotationX, minimumVertical, maximumVertical);
 
-        if (Input.GetKey(KeyCode.UpArrow))
-        {
-            //transform.transform.position += new Vector3(0, 0, translate);
-            //transform.Translate(0, 0, translate);
-            transform.Translate( new Vector3(0, 0, translate), Space.Self);
-        }
-        else if (Input.GetKey(KeyCode.DownArrow))
-        {
-            transform.Translate( new Vector3(0, 0, -translate), Space.Self);
-            //transform.Translate(0, 0, -translate);
-            //transform.transform.position += new Vector3(0, 0, -translate);
-        }
-        else if (Input.GetKey(KeyCode.LeftArrow))
-        {
-            transform.Translate( new Vector3(-translate, 0, 0), Space.Self);
+        //var deltaRotationX = Input.GetAxis("Mouse Y") * sensitivityVertical;
+        //var rotationX = transform.localEulerAngles.x - deltaRotationX;
+        //rotationX = Mathf.Clamp(rotationX, minimumVertical, maximumVertical);
+        float deltaRotationY = Input.GetAxis("Mouse X") * sensitivityHorizontal;
+        float rotationY = transform.localEulerAngles.y + deltaRotationY;
+        transform.localEulerAngles = new Vector3(_rotationX, rotationY, 0);
 
-            //transform.Translate(-translate, 0, 0);
-            //transform.transform.position += new Vector3(-translate, 0, 0);
-
-        }
-        else if (Input.GetKey(KeyCode.RightArrow))
-        {
-            transform.Translate( new Vector3(translate, 0, 0), Space.Self);
-
-            //transform.Translate(translate, 0, 0);
-            //transform.transform.position += new Vector3(translate, 0, 0);
-        }
-        else if (Input.GetAxis("Mouse ScrollWheel") > 0f)
-        {
-            //transform.Translate(-translate, 0, 0);
-            transform.transform.position += new Vector3(0, -3 * translate, 0);
-        }
-        else if (Input.GetAxis("Mouse ScrollWheel") < 0f)
-        {
-            //transform.Translate(translate, 0, 0);
-            transform.transform.position += new Vector3(0, 3 * translate, 0);
-        }
+        float deltaX = Input.GetAxis("Horizontal") * speed * Time.deltaTime;
+        float deltaZ = Input.GetAxis("Vertical") * speed * Time.deltaTime;
+        Vector3 movement = new Vector3(deltaX, 0, deltaZ);
+        movement = transform.TransformDirection(movement); 
+        _charController.Move(movement);
     }
 }
