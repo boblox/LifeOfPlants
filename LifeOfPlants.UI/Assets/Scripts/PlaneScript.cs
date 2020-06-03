@@ -18,7 +18,7 @@ public class PlaneScript : MonoBehaviour
     private readonly ConcurrentStack<Plant> addedPlants = new ConcurrentStack<Plant>();
     private readonly Dictionary<Plant, GameObject> plantsDict = new Dictionary<Plant, GameObject>();
     private const float tickGap = 0.3f;
-    private readonly Random random = new Random();
+    private readonly Random random = new Random(); 
 
     // Start is called before the first frame update
     void Start()
